@@ -32,6 +32,13 @@ export const STATE_OPTIONS: StateOption[] = [
     code: 'vic',
     electionYear: '2022',
     electionDate: '2022-11-26'
+  },
+  {
+    id: '5218fcb7-1365-40f9-8498-0d27af77d1ea', // South Australia UUID from your existing database
+    name: 'South Australia',
+    code: 'sa',
+    electionYear: '2022',
+    electionDate: '2022-03-19'
   }
 ];
 
