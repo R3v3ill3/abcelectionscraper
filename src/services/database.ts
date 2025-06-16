@@ -1,14 +1,15 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { ScrapedMemberData, MemberWithDetails, Party, Electorate, MP } from '../types/parliament';
 
-// Queensland state UUID from your database
-const QUEENSLAND_STATE_ID = '34e083cf-a179-4536-a934-86692f14609d';
-
 export class DatabaseService {
   /**
    * Process scraped data and insert into normalized database structure
    */
-  static async processAndInsertScrapedData(scrapedData: ScrapedMemberData[]): Promise<{ success: boolean; error?: string; insertedCount?: number }> {
+  static async processAndInsertScrapedData(
+    scrapedData: ScrapedMemberData[], 
+    stateId: string, 
+    electionDate: string
+  ): Promise<{ success: boolean; error?: string; insertedCount?: number }> {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Supabase not configured. Please set up your environment variables.' };
     }
@@ -33,7 +34,7 @@ export class DatabaseService {
         // 2. Ensure electorate exists (upsert) with new schema including vote counts
         const electorateResult = await this.upsertElectorate({
           name: memberData.electorate_name,
-          state_id: QUEENSLAND_STATE_ID,
+          state_id: stateId,
           type: 'state',
           total_votes_cast: memberData.total_votes_cast,
           current_margin_votes: memberData.current_margin_votes,
@@ -44,7 +45,7 @@ export class DatabaseService {
           loser_two_party_preferred_votes: memberData.loser_two_party_preferred_votes,
           previous_margin_percentage: memberData.previous_margin_percentage,
           swing_at_last_election: memberData.swing_percentage,
-          last_election_date: '2024-10-26' // Queensland 2024 election date
+          last_election_date: electionDate
         });
 
         if (!electorateResult.success || !electorateResult.electorate) {
@@ -59,7 +60,7 @@ export class DatabaseService {
           last_name: memberData.last_name,
           party_id: partyResult.party.id,
           electorate_id: electorateResult.electorate.id,
-          start_date: '2024-10-26' // Election date
+          start_date: electionDate
         });
 
         if (!mpResult.success) {
@@ -297,10 +298,10 @@ export class DatabaseService {
   }
 
   /**
-   * Get all members with full details (joined across tables) - FILTERED FOR QUEENSLAND STATE ONLY
+   * Get all members with full details (joined across tables) - FILTERED BY STATE
    * Updated to include vote counts
    */
-  static async getMembers(): Promise<{ data: MemberWithDetails[]; error?: string }> {
+  static async getMembers(stateId: string): Promise<{ data: MemberWithDetails[]; error?: string }> {
     if (!isSupabaseConfigured()) {
       return { data: [], error: 'Supabase not configured' };
     }
@@ -340,7 +341,7 @@ export class DatabaseService {
             )
           )
         `)
-        .eq('electorates.state_id', QUEENSLAND_STATE_ID)
+        .eq('electorates.state_id', stateId)
         .eq('electorates.type', 'state')
         .order('created_at', { ascending: false });
 
@@ -384,32 +385,47 @@ export class DatabaseService {
   }
 
   /**
-   * Clear all MP data (and related records)
+   * Clear all MP data for a specific state (and related records)
    */
-  static async clearMembers(): Promise<{ success: boolean; error?: string }> {
+  static async clearMembers(stateId: string): Promise<{ success: boolean; error?: string }> {
     if (!isSupabaseConfigured()) {
       return { success: false, error: 'Supabase not configured' };
     }
 
     try {
-      // Clear MPs first (due to foreign key constraints)
-      const { error: mpError } = await supabase
-        .from('mps')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
+      // Get all electorates for this state
+      const { data: electorates, error: electoratesError } = await supabase
+        .from('electorates')
+        .select('id')
+        .eq('state_id', stateId);
 
-      if (mpError) {
-        return { success: false, error: mpError.message };
+      if (electoratesError) {
+        return { success: false, error: electoratesError.message };
       }
 
-      // Clear electorates current_member_id references
-      const { error: electorateError } = await supabase
-        .from('electorates')
-        .update({ current_member_id: null })
-        .not('current_member_id', 'is', null);
+      const electorateIds = electorates?.map(e => e.id) || [];
 
-      if (electorateError) {
-        console.warn('Failed to clear electorate current member references:', electorateError);
+      if (electorateIds.length > 0) {
+        // Clear MPs for this state's electorates
+        const { error: mpError } = await supabase
+          .from('mps')
+          .delete()
+          .in('electorate_id', electorateIds);
+
+        if (mpError) {
+          return { success: false, error: mpError.message };
+        }
+
+        // Clear electorates current_member_id references for this state
+        const { error: electorateError } = await supabase
+          .from('electorates')
+          .update({ current_member_id: null })
+          .eq('state_id', stateId)
+          .not('current_member_id', 'is', null);
+
+        if (electorateError) {
+          console.warn('Failed to clear electorate current member references:', electorateError);
+        }
       }
 
       return { success: true };
@@ -439,7 +455,11 @@ export class DatabaseService {
       scraped_at: member.scraped_at || new Date().toISOString()
     }));
 
-    const result = await this.processAndInsertScrapedData(scrapedData);
+    const result = await this.processAndInsertScrapedData(
+      scrapedData, 
+      '34e083cf-a179-4536-a934-86692f14609d', // Default to Queensland
+      '2024-10-26' // Default election date
+    );
     return { success: result.success, error: result.error };
   }
 }

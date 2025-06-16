@@ -3,6 +3,9 @@ import { Database, Download, RefreshCw, Eye, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserMenu } from './UserMenu';
 import { AuthModal } from './AuthModal';
+import { StateSelector } from './StateSelector';
+import { StateOption } from '../types/parliament';
+import { STATE_OPTIONS } from '../hooks/useParliamentaryData';
 
 interface HeaderProps {
   onScrape: () => void;
@@ -10,6 +13,8 @@ interface HeaderProps {
   isScraping: boolean;
   totalRecords: number;
   isReviewPending?: boolean;
+  selectedStateOption: StateOption;
+  onStateChange: (state: StateOption) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -17,7 +22,9 @@ export const Header: React.FC<HeaderProps> = ({
   onExport, 
   isScraping, 
   totalRecords, 
-  isReviewPending = false 
+  isReviewPending = false,
+  selectedStateOption,
+  onStateChange
 }) => {
   const { user } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -38,10 +45,18 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* State Selector */}
+              <StateSelector
+                selectedState={selectedStateOption}
+                stateOptions={STATE_OPTIONS}
+                onStateChange={onStateChange}
+                disabled={isScraping || isReviewPending}
+              />
+
               <div className="text-right hidden sm:block">
                 <p className="text-2xl font-bold text-gray-900">{totalRecords.toLocaleString()}</p>
                 <p className="text-sm text-gray-600">
-                  {isReviewPending ? 'Records for Review' : 'Total Records'}
+                  {isReviewPending ? 'Records for Review' : `${selectedStateOption.name} MPs`}
                 </p>
               </div>
               
@@ -69,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
                   title={!user ? 'Sign in to start scraping' : ''}
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${isScraping ? 'animate-spin' : ''}`} />
-                  {isScraping ? 'Scraping...' : 'Start Scrape'}
+                  {isScraping ? 'Scraping...' : `Scrape ${selectedStateOption.name}`}
                 </button>
               </div>
 

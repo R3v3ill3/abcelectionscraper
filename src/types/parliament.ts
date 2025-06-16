@@ -46,6 +46,15 @@ export interface MP {
   created_at?: string;
 }
 
+// State option for scraping configuration
+export interface StateOption {
+  id: string;
+  name: string;
+  code: string;
+  electionYear: string;
+  electionDate: string;
+}
+
 // Scraped data structure (before normalization) - Updated with new fields
 export interface ScrapedMemberData {
   first_name: string;

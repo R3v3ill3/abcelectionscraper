@@ -39,11 +39,11 @@ serve(async (req) => {
   }
 
   try {
-    const { urls } = await req.json()
+    const { stateCode, year } = await req.json()
     
-    if (!urls || !Array.isArray(urls)) {
+    if (!stateCode || !year) {
       return new Response(
-        JSON.stringify({ error: 'URLs array is required' }),
+        JSON.stringify({ error: 'stateCode and year are required' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -51,31 +51,19 @@ serve(async (req) => {
       )
     }
 
+    console.log(`Starting scrape for ${stateCode.toUpperCase()} ${year}`)
+
+    // Construct the ABC News URL for the specified state and year
+    const abcUrl = `https://www.abc.net.au/news/elections/${stateCode}/${year}/results?sortBy=latest&filter=all&selectedRegion=all&selectedParty=all&partyWonBy=all&partyHeldBy=all`
+    
     // Focus on ABC News scraping with improved data extraction
-    const results = await Promise.all([
-      scrapeABCNews(urls.find(url => url.includes('abc.net.au')) || ''),
-    ])
-
-    const allMembers: ScrapedMemberData[] = []
-    const allErrors: string[] = []
-    let totalFound = 0
-
-    results.forEach(result => {
-      if (result.success) {
-        allMembers.push(...result.data)
-      }
-      allErrors.push(...result.errors)
-      totalFound += result.totalFound
-    })
-
-    // Remove duplicates
-    const uniqueMembers = removeDuplicates(allMembers)
+    const result = await scrapeABCNews(abcUrl, stateCode, year)
 
     const response = {
-      success: uniqueMembers.length > 0,
-      data: uniqueMembers,
-      errors: allErrors,
-      totalFound: uniqueMembers.length
+      success: result.success,
+      data: result.data,
+      errors: result.errors,
+      totalFound: result.totalFound
     }
 
     return new Response(
@@ -102,7 +90,7 @@ serve(async (req) => {
   }
 })
 
-async function scrapeABCNews(url: string): Promise<ScrapingResult> {
+async function scrapeABCNews(url: string, stateCode: string, year: string): Promise<ScrapingResult> {
   if (!url) {
     return {
       success: false,
@@ -113,13 +101,13 @@ async function scrapeABCNews(url: string): Promise<ScrapingResult> {
   }
 
   try {
-    console.log(`Fetching ABC News data using direct API approach`)
+    console.log(`Fetching ABC News data for ${stateCode.toUpperCase()} ${year} using direct API approach`)
     
     // Use the direct API endpoints that ABC News uses internally
     const apiEndpoints = [
-      'https://www.abc.net.au/news-web/api/loader/channelrefetch?name=ElectionElectorateList&props=%7B%22meta%22%3A%7B%22year%22%3A%222024%22%2C%22state%22%3A%22qld%22%2C%22maxParties%22%3A4%2C%22maxSwing%22%3A15%2C%22totalSeats%22%3A93%2C%22toWin%22%3A47%2C%22showBooth%22%3Afalse%2C%22useV3%22%3Atrue%2C%22publishDate%22%3A%222024-10-26T17%3A00%3A00%2B10%3A00%22%2C%22remoteContentPath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2Fqld%2F2024%22%2C%22resultsDir%22%3A%22results%22%2C%22picturePath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2Fqld%2F2024%2Fguide%2Fphotos%2F%22%7D%7D',
-      'https://www.abc.net.au/dat/news/elections/qld/2024/results/electorates.json',
-      'https://www.abc.net.au/dat/news/elections/qld/2024/results/summary.json'
+      `https://www.abc.net.au/news-web/api/loader/channelrefetch?name=ElectionElectorateList&props=%7B%22meta%22%3A%7B%22year%22%3A%22${year}%22%2C%22state%22%3A%22${stateCode}%22%2C%22maxParties%22%3A4%2C%22maxSwing%22%3A15%2C%22totalSeats%22%3A93%2C%22toWin%22%3A47%2C%22showBooth%22%3Afalse%2C%22useV3%22%3Atrue%2C%22publishDate%22%3A%22${year}-10-26T17%3A00%3A00%2B10%3A00%22%2C%22remoteContentPath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2F${stateCode}%2F${year}%22%2C%22resultsDir%22%3A%22results%22%2C%22picturePath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2F${stateCode}%2F${year}%2Fguide%2Fphotos%2F%22%7D%7D`,
+      `https://www.abc.net.au/dat/news/elections/${stateCode}/${year}/results/electorates.json`,
+      `https://www.abc.net.au/dat/news/elections/${stateCode}/${year}/results/summary.json`
     ]
 
     const allMembers: ScrapedMemberData[] = []
@@ -138,7 +126,7 @@ async function scrapeABCNews(url: string): Promise<ScrapingResult> {
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
-            'Referer': 'https://www.abc.net.au/news/elections/qld/2024/results',
+            'Referer': `https://www.abc.net.au/news/elections/${stateCode}/${year}/results`,
           }
         })
 

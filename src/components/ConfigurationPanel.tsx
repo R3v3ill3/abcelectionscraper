@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle, Settings, ExternalLink, Save, X, Eye, Shield } from 'lucide-react';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { ScrapedMemberData } from '../types/parliament';
+import { ScrapedMemberData, StateOption } from '../types/parliament';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ConfigurationPanelProps {
@@ -10,6 +10,7 @@ interface ConfigurationPanelProps {
   scrapedDataForReview: ScrapedMemberData[] | null;
   onSaveReviewedData: () => void;
   onCancelReview: () => void;
+  selectedStateOption: StateOption;
 }
 
 export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ 
@@ -17,7 +18,8 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
   isClearing,
   scrapedDataForReview,
   onSaveReviewedData,
-  onCancelReview
+  onCancelReview,
+  selectedStateOption
 }) => {
   const supabaseConfigured = isSupabaseConfigured();
   const isReviewMode = scrapedDataForReview !== null;
@@ -65,7 +67,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
               <div className="flex-1">
                 <h3 className="font-medium text-amber-900">Data Review Mode</h3>
                 <p className="text-sm text-amber-800 mt-1">
-                  {scrapedDataForReview.length} records are ready for review. 
+                  {scrapedDataForReview.length} records from {selectedStateOption.name} are ready for review. 
                   Please examine the data in the table above before saving to the database.
                 </p>
                 <div className="flex space-x-3 mt-4">
@@ -123,25 +125,11 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div>
-                <p className="font-medium text-gray-900">ABC News QLD Elections</p>
-                <p className="text-sm text-gray-600">Queensland 2024 election results</p>
+                <p className="font-medium text-gray-900">ABC News {selectedStateOption.name} Elections</p>
+                <p className="text-sm text-gray-600">{selectedStateOption.name} {selectedStateOption.electionYear} election results</p>
               </div>
               <a
-                href="https://www.abc.net.au/news/elections/qld/2024/results"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">AEC Tally Room</p>
-                <p className="text-sm text-gray-600">Official Australian Electoral Commission data</p>
-              </div>
-              <a
-                href="https://tallyroom.aec.gov.au/HouseSeatSummary-31496.htm"
+                href={`https://www.abc.net.au/news/elections/${selectedStateOption.code}/${selectedStateOption.electionYear}/results`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-800"
@@ -162,14 +150,14 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
               className="inline-flex items-center px-4 py-2 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               title={!user ? 'Sign in to clear data' : ''}
             >
-              {isClearing ? 'Clearing...' : 'Clear All Data'}
+              {isClearing ? 'Clearing...' : `Clear ${selectedStateOption.name} Data`}
             </button>
             <p className="text-xs text-gray-500 mt-2">
               {!user 
                 ? 'Sign in to access database management features.'
                 : isReviewMode 
                   ? 'Complete or cancel the review process before clearing data.'
-                  : 'This will permanently delete all scraped data from the database.'
+                  : `This will permanently delete all scraped data for ${selectedStateOption.name} from the database.`
               }
             </p>
           </div>

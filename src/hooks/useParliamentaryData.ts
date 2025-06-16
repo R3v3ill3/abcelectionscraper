@@ -1,11 +1,30 @@
 import { useState, useEffect } from 'react';
-import { MemberWithDetails, ScrapingProgress, ScrapedMemberData } from '../types/parliament';
+import { MemberWithDetails, ScrapingProgress, ScrapedMemberData, StateOption } from '../types/parliament';
 import { ScraperService } from '../services/scraper';
 import { DatabaseService } from '../services/database';
+
+// Available state options for scraping
+export const STATE_OPTIONS: StateOption[] = [
+  {
+    id: '34e083cf-a179-4536-a934-86692f14609d', // Queensland UUID from database
+    name: 'Queensland',
+    code: 'qld',
+    electionYear: '2024',
+    electionDate: '2024-10-26'
+  },
+  {
+    id: '5c397f74-047c-4548-a97e-757b168715ab', // Western Australia UUID from database
+    name: 'Western Australia',
+    code: 'wa',
+    electionYear: '2025',
+    electionDate: '2025-03-08'
+  }
+];
 
 export const useParliamentaryData = () => {
   const [members, setMembers] = useState<MemberWithDetails[]>([]);
   const [scrapedDataForReview, setScrapedDataForReview] = useState<ScrapedMemberData[] | null>(null);
+  const [selectedStateOption, setSelectedStateOption] = useState<StateOption>(STATE_OPTIONS[0]); // Default to Queensland
   const [progress, setProgress] = useState<ScrapingProgress>({
     current: 0,
     total: 0,
@@ -17,7 +36,7 @@ export const useParliamentaryData = () => {
   const loadExistingData = async () => {
     setIsLoading(true);
     try {
-      const { data } = await DatabaseService.getMembers();
+      const { data } = await DatabaseService.getMembers(selectedStateOption.id);
       setMembers(data);
     } catch (error) {
       console.error('Failed to load existing data:', error);
@@ -31,32 +50,32 @@ export const useParliamentaryData = () => {
       current: 0,
       total: 3,
       status: 'scraping',
-      message: 'Initializing scraping process...'
+      message: `Initializing scraping process for ${selectedStateOption.name}...`
     });
 
     try {
-      // Step 1: Scrape ABC News
+      // Step 1: Scrape ABC News for selected state
       setProgress(prev => ({
         ...prev,
         current: 1,
-        message: 'Scraping ABC News Queensland Election Results...'
+        message: `Scraping ABC News ${selectedStateOption.name} ${selectedStateOption.electionYear} Election Results...`
       }));
 
-      // Step 2: Scrape AEC Tally Room
+      // Step 2: Process data
       setProgress(prev => ({
         ...prev,
         current: 2,
-        message: 'Scraping AEC Tally Room data...'
+        message: 'Processing and combining results...'
       }));
 
-      // Get all data
+      // Get all data for the selected state
       setProgress(prev => ({
         ...prev,
         status: 'processing',
         message: 'Processing and combining results...'
       }));
 
-      const result = await ScraperService.scrapeAllSources();
+      const result = await ScraperService.scrapeElections(selectedStateOption.code, selectedStateOption.electionYear);
 
       if (result.success) {
         // Convert scraped data to display format for review with new schema including vote counts
@@ -70,8 +89,8 @@ export const useParliamentaryData = () => {
           party_color: undefined,
           party_hex_code: undefined,
           electorate_name: member.electorate_name,
-          state_name: 'Queensland',
-          state_code: 'QLD',
+          state_name: selectedStateOption.name,
+          state_code: selectedStateOption.code.toUpperCase(),
           total_votes_cast: member.total_votes_cast,
           current_margin_votes: member.current_margin_votes,
           current_margin_percentage: member.current_margin_percentage,
@@ -83,7 +102,7 @@ export const useParliamentaryData = () => {
           swing_percentage: member.swing_percentage,
           source_url: member.source_url,
           scraped_at: member.scraped_at,
-          start_date: '2024-10-26',
+          start_date: selectedStateOption.electionDate,
           end_date: undefined,
           created_at: member.scraped_at
         }));
@@ -96,7 +115,7 @@ export const useParliamentaryData = () => {
           current: 3,
           total: 3,
           status: 'review_pending',
-          message: `Found ${result.totalFound} members. Please review the data before saving to database.`
+          message: `Found ${result.totalFound} members from ${selectedStateOption.name}. Please review the data before saving to database.`
         });
       } else {
         setProgress({
@@ -126,7 +145,11 @@ export const useParliamentaryData = () => {
     }));
 
     try {
-      const dbResult = await DatabaseService.processAndInsertScrapedData(scrapedDataForReview);
+      const dbResult = await DatabaseService.processAndInsertScrapedData(
+        scrapedDataForReview, 
+        selectedStateOption.id, 
+        selectedStateOption.electionDate
+      );
       
       if (dbResult.success) {
         // Clear review data and reload from database
@@ -178,7 +201,7 @@ export const useParliamentaryData = () => {
 
   const clearDatabase = async () => {
     try {
-      const result = await DatabaseService.clearMembers();
+      const result = await DatabaseService.clearMembers(selectedStateOption.id);
       if (result.success) {
         setMembers([]);
         return { success: true };
@@ -200,7 +223,7 @@ export const useParliamentaryData = () => {
         party_name: member.party_name,
         party_short_name: member.party_short_name || 'UNK',
         electorate_name: member.electorate_name,
-        state_name: 'Queensland',
+        state_name: selectedStateOption.name,
         total_votes_cast: member.total_votes_cast,
         current_margin_votes: member.current_margin_votes,
         current_margin_percentage: member.current_margin_percentage,
@@ -223,7 +246,7 @@ export const useParliamentaryData = () => {
       'First Name,Last Name,Full Name,Party,Party Short Name,Electorate,State,Total Votes Cast,Current Margin Votes,Current Margin %,Winner TPP %,Loser TPP %,Winner TPP Votes,Loser TPP Votes,Previous Margin %,Swing %,Source URL,Scraped At',
       // Data rows
       ...dataToExport.map(member => 
-        `"${member.first_name}","${member.last_name}","${member.full_name || `${member.first_name} ${member.last_name}`}","${member.party_name}","${member.party_short_name}","${member.electorate_name}","${member.state_name || 'Queensland'}",${member.total_votes_cast || 0},${member.current_margin_votes || 0},${member.current_margin_percentage || 0},${member.winner_two_party_preferred_percent || 0},${member.loser_two_party_preferred_percent || 0},${member.winner_two_party_preferred_votes || 0},${member.loser_two_party_preferred_votes || 0},${member.previous_margin_percentage || 0},${member.swing_percentage || 0},"${member.source_url || ''}","${member.scraped_at}"`
+        `"${member.first_name}","${member.last_name}","${member.full_name || `${member.first_name} ${member.last_name}`}","${member.party_name}","${member.party_short_name}","${member.electorate_name}","${member.state_name || selectedStateOption.name}",${member.total_votes_cast || 0},${member.current_margin_votes || 0},${member.current_margin_percentage || 0},${member.winner_two_party_preferred_percent || 0},${member.loser_two_party_preferred_percent || 0},${member.winner_two_party_preferred_votes || 0},${member.loser_two_party_preferred_votes || 0},${member.previous_margin_percentage || 0},${member.swing_percentage || 0},"${member.source_url || ''}","${member.scraped_at}"`
       )
     ].join('\n');
 
@@ -231,20 +254,23 @@ export const useParliamentaryData = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `queensland-mps-${scrapedDataForReview ? 'scraped' : 'database'}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${selectedStateOption.code}-mps-${scrapedDataForReview ? 'scraped' : 'database'}-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
+  // Reload data when selected state changes
   useEffect(() => {
     loadExistingData();
-  }, []);
+  }, [selectedStateOption.id]);
 
   return {
     members,
     scrapedDataForReview,
+    selectedStateOption,
+    setSelectedStateOption,
     progress,
     isLoading,
     startScraping,

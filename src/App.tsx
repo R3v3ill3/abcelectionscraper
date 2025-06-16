@@ -12,6 +12,8 @@ function AppContent() {
   const { 
     members, 
     scrapedDataForReview,
+    selectedStateOption,
+    setSelectedStateOption,
     progress, 
     isLoading, 
     startScraping, 
@@ -53,6 +55,8 @@ function AppContent() {
         isScraping={isScraping}
         totalRecords={members.length}
         isReviewPending={isReviewPending}
+        selectedStateOption={selectedStateOption}
+        onStateChange={setSelectedStateOption}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -67,6 +71,7 @@ function AppContent() {
                 members={members} 
                 isLoading={isLoading} 
                 isReviewMode={isReviewPending}
+                selectedState={selectedStateOption}
               />
             </AuthGuard>
           </div>
@@ -79,6 +84,7 @@ function AppContent() {
               scrapedDataForReview={scrapedDataForReview}
               onSaveReviewedData={handleSaveReviewedData}
               onCancelReview={cancelReview}
+              selectedStateOption={selectedStateOption}
             />
           </div>
         </div>

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { MemberWithDetails } from '../types/parliament';
+import { MemberWithDetails, StateOption } from '../types/parliament';
 import { Search, ArrowUpDown, ExternalLink, Eye } from 'lucide-react';
 
 interface DataTableProps {
   members: MemberWithDetails[];
   isLoading: boolean;
   isReviewMode?: boolean;
+  selectedState: StateOption;
 }
 
 type SortField = keyof MemberWithDetails;
@@ -14,7 +15,8 @@ type SortDirection = 'asc' | 'desc';
 export const DataTable: React.FC<DataTableProps> = ({ 
   members, 
   isLoading, 
-  isReviewMode = false 
+  isReviewMode = false,
+  selectedState
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('current_margin_percentage');
@@ -102,7 +104,7 @@ export const DataTable: React.FC<DataTableProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
           <div className="flex items-center space-x-3">
             <h2 className="text-xl font-semibold text-gray-900">
-              Queensland State MPs ({members.length})
+              {selectedState.name} State MPs ({members.length})
             </h2>
             {isReviewMode && (
               <div className="flex items-center space-x-2 px-2 py-1 bg-amber-100 border border-amber-300 rounded-md">
@@ -298,7 +300,7 @@ export const DataTable: React.FC<DataTableProps> = ({
 
       {filteredAndSortedMembers.length === 0 && !isLoading && (
         <div className="text-center py-12">
-          <p className="text-gray-500">No Queensland MPs found.</p>
+          <p className="text-gray-500">No {selectedState.name} MPs found.</p>
           {searchTerm && (
             <p className="text-sm text-gray-400 mt-1">
               Try adjusting your search term.

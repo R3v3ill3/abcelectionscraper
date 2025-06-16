@@ -2,7 +2,7 @@ import { ScrapedMemberData, ScrapingResult } from '../types/parliament';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export class ScraperService {
-  static async scrapeAllSources(): Promise<ScrapingResult> {
+  static async scrapeElections(stateCode: string, year: string): Promise<ScrapingResult> {
     // Check if Supabase is properly configured
     if (!isSupabaseConfigured()) {
       console.warn('Supabase not configured properly');
@@ -20,18 +20,13 @@ export class ScraperService {
     }
 
     try {
-      const urls = [
-        'https://www.abc.net.au/news/elections/qld/2024/results?sortBy=latest&filter=all&selectedRegion=all&selectedParty=all&partyWonBy=all&partyHeldBy=all',
-        'https://results.elections.qld.gov.au/SGE2024'
-      ];
-
-      console.log('Calling Supabase Edge Function: scrape-election-data');
+      console.log(`Calling Supabase Edge Function: scrape-election-data for ${stateCode.toUpperCase()} ${year}`);
       console.log('Function URL:', `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scrape-election-data`);
 
       // Add timeout and better error handling for the edge function call
       const { data, error } = await Promise.race([
         supabase.functions.invoke('scrape-election-data', {
-          body: { urls }
+          body: { stateCode, year }
         }),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Request timeout after 45 seconds')), 45000)
@@ -83,7 +78,7 @@ export class ScraperService {
         };
       }
 
-      console.log(`Edge function returned successfully with ${data.totalFound || 0} members`);
+      console.log(`Edge function returned successfully with ${data.totalFound || 0} members for ${stateCode.toUpperCase()} ${year}`);
 
       return {
         success: data.success,
@@ -124,11 +119,15 @@ export class ScraperService {
   }
 
   // Legacy methods for backward compatibility
+  static async scrapeAllSources(): Promise<ScrapingResult> {
+    return this.scrapeElections('qld', '2024');
+  }
+
   static async scrapeABCNews(): Promise<ScrapingResult> {
-    return this.scrapeAllSources();
+    return this.scrapeElections('qld', '2024');
   }
 
   static async scrapeECQ(): Promise<ScrapingResult> {
-    return this.scrapeAllSources();
+    return this.scrapeElections('qld', '2024');
   }
 }
