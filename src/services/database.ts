@@ -15,16 +15,18 @@ export class DatabaseService {
 
     try {
       let insertedCount = 0;
+      const skippedMembers: string[] = [];
 
       for (const memberData of scrapedData) {
-        // 1. Ensure party exists (upsert)
-        const partyResult = await this.upsertParty({
+        // 1. Find existing party (DO NOT CREATE NEW ONES)
+        const partyResult = await this.findParty({
           name: memberData.party_name,
           short_name: memberData.party_short_name || this.generateShortName(memberData.party_name)
         });
 
         if (!partyResult.success || !partyResult.party) {
-          console.error(`Failed to upsert party: ${memberData.party_name}`);
+          console.error(`Party not found in database: ${memberData.party_name}. Skipping member: ${memberData.first_name} ${memberData.last_name}`);
+          skippedMembers.push(`${memberData.first_name} ${memberData.last_name} (Party: ${memberData.party_name})`);
           continue;
         }
 
@@ -46,7 +48,8 @@ export class DatabaseService {
         });
 
         if (!electorateResult.success || !electorateResult.electorate) {
-          console.error(`Failed to upsert electorate: ${memberData.electorate_name}`);
+          console.error(`Failed to upsert electorate: ${memberData.electorate_name}. Skipping member: ${memberData.first_name} ${memberData.last_name}`);
+          skippedMembers.push(`${memberData.first_name} ${memberData.last_name} (Electorate: ${memberData.electorate_name})`);
           continue;
         }
 
@@ -61,6 +64,7 @@ export class DatabaseService {
 
         if (!mpResult.success) {
           console.error(`Failed to insert MP: ${memberData.first_name} ${memberData.last_name}`);
+          skippedMembers.push(`${memberData.first_name} ${memberData.last_name} (MP insertion failed)`);
           continue;
         }
 
@@ -72,7 +76,18 @@ export class DatabaseService {
         insertedCount++;
       }
 
-      return { success: true, insertedCount };
+      // Report results including skipped members
+      let resultMessage = `Successfully processed ${insertedCount} of ${scrapedData.length} members`;
+      if (skippedMembers.length > 0) {
+        resultMessage += `\n\nSkipped ${skippedMembers.length} members due to missing parties or other errors:\n${skippedMembers.join('\n')}`;
+        console.warn('Skipped members:', skippedMembers);
+      }
+
+      return { 
+        success: insertedCount > 0, 
+        insertedCount,
+        error: skippedMembers.length > 0 ? resultMessage : undefined
+      };
     } catch (error) {
       console.error('Database processing error:', error);
       return { success: false, error: 'Failed to process and insert data into database' };
@@ -80,12 +95,12 @@ export class DatabaseService {
   }
 
   /**
-   * Upsert party (insert if not exists, return existing if found)
+   * Find existing party (DO NOT CREATE NEW ONES)
    */
-  private static async upsertParty(partyData: { name: string; short_name: string }): Promise<{ success: boolean; party?: Party; error?: string }> {
+  private static async findParty(partyData: { name: string; short_name: string }): Promise<{ success: boolean; party?: Party; error?: string }> {
     try {
-      // Check if party exists
-      const { data: existingParty, error: selectError } = await supabase
+      // First try exact name match
+      let { data: existingParty, error: selectError } = await supabase
         .from('parties')
         .select('*')
         .eq('name', partyData.name)
@@ -99,20 +114,49 @@ export class DatabaseService {
         return { success: true, party: existingParty };
       }
 
-      // Insert new party
-      const { data: newParty, error: insertError } = await supabase
+      // If exact name match fails, try short name match
+      const { data: partyByShortName, error: shortNameError } = await supabase
         .from('parties')
-        .insert([partyData])
-        .select()
+        .select('*')
+        .eq('short_name', partyData.short_name)
         .single();
 
-      if (insertError) {
-        return { success: false, error: insertError.message };
+      if (shortNameError && shortNameError.code !== 'PGRST116') {
+        return { success: false, error: shortNameError.message };
       }
 
-      return { success: true, party: newParty };
+      if (partyByShortName) {
+        return { success: true, party: partyByShortName };
+      }
+
+      // If no exact matches, try fuzzy matching on existing parties
+      const { data: allParties, error: allPartiesError } = await supabase
+        .from('parties')
+        .select('*');
+
+      if (allPartiesError) {
+        return { success: false, error: allPartiesError.message };
+      }
+
+      // Try to find a close match
+      const fuzzyMatch = allParties?.find(party => 
+        party.name.toLowerCase().includes(partyData.name.toLowerCase()) ||
+        partyData.name.toLowerCase().includes(party.name.toLowerCase()) ||
+        party.short_name === partyData.short_name
+      );
+
+      if (fuzzyMatch) {
+        console.log(`Found fuzzy match for "${partyData.name}": "${fuzzyMatch.name}"`);
+        return { success: true, party: fuzzyMatch };
+      }
+
+      // No party found - DO NOT CREATE NEW ONE
+      return { 
+        success: false, 
+        error: `Party "${partyData.name}" not found in database. Available parties should be pre-loaded. Please check party name standardization or manually add the party to the database.` 
+      };
     } catch (error) {
-      return { success: false, error: 'Failed to upsert party' };
+      return { success: false, error: 'Failed to find party in database' };
     }
   }
 
