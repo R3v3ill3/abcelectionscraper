@@ -368,7 +368,8 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
     // Calculate current margin from TPP data
     if (winnerTwoPartyPreferredVotes > 0 && loserTwoPartyPreferredVotes > 0) {
       currentMarginVotes = winnerTwoPartyPreferredVotes - loserTwoPartyPreferredVotes
-      currentMarginPercentage = winnerTwoPartyPreferredPercent - loserTwoPartyPreferredPercent
+      // FIXED: Calculate margin as difference from 50%, not winner minus loser
+      currentMarginPercentage = winnerTwoPartyPreferredPercent - 50
       console.log(`Calculated current margin: ${currentMarginVotes} votes (${currentMarginPercentage}%)`)
     }
     
