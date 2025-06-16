@@ -51,10 +51,9 @@ serve(async (req) => {
       )
     }
 
-    // TEMPORARILY DISABLE ECQ SCRAPING TO FOCUS ON ABC
+    // Focus on ABC News scraping with improved data extraction
     const results = await Promise.all([
       scrapeABCNews(urls.find(url => url.includes('abc.net.au')) || ''),
-      // scrapeECQ(urls.find(url => url.includes('elections.qld.gov.au')) || '') // DISABLED
     ])
 
     const allMembers: ScrapedMemberData[] = []
@@ -299,34 +298,6 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
     console.log('Item keys:', Object.keys(item).join(', '))
     console.log('Full item data:', JSON.stringify(item, null, 2))
     
-    // Log specific fields we're interested in
-    console.log('=== SPECIFIC FIELD INSPECTION ===')
-    console.log('item.margin:', item.margin, typeof item.margin)
-    console.log('item.marginPercent:', item.marginPercent, typeof item.marginPercent)
-    console.log('item.parties:', item.parties)
-    console.log('item.candidates:', item.candidates)
-    console.log('item.swingDial:', item.swingDial)
-    console.log('item.totalVotes:', item.totalVotes)
-    console.log('item.afterRPeference:', item.afterRPeference)
-    
-    // If parties array exists, log its structure
-    if (item.parties && Array.isArray(item.parties)) {
-      console.log('=== PARTIES ARRAY STRUCTURE ===')
-      item.parties.forEach((party: any, index: number) => {
-        console.log(`Party ${index}:`, JSON.stringify(party, null, 2))
-      })
-    }
-    
-    // If candidates array exists, log its structure
-    if (item.candidates && Array.isArray(item.candidates)) {
-      console.log('=== CANDIDATES ARRAY STRUCTURE ===')
-      item.candidates.forEach((candidate: any, index: number) => {
-        console.log(`Candidate ${index}:`, JSON.stringify(candidate, null, 2))
-      })
-    }
-    
-    console.log('=== END INSPECTION ===')
-    
     // Extract electorate name - prioritize 'name' field as identified
     const electorate = item.name || item.electorate || item.seat || item.electorateName || 
                       item.division || item.district || item.constituency || ''
@@ -336,66 +307,17 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
       return null
     }
     
-    // Extract winner/candidate information - prioritize 'leadingCandidate' as identified
-    const winner = item.leadingCandidate || item.winner || item.candidate || item.elected || 
-                   item.member || item.incumbent || item.declared || item
-    
-    if (!winner) {
-      console.log(`No winner/candidate found for ${electorate}`)
-      return null
+    // PRIORITY: Extract TPP data from predicted2cp or simple2CP objects
+    let tppSourceData = null
+    if (item.predicted2cp && typeof item.predicted2cp === 'object') {
+      tppSourceData = item.predicted2cp
+      console.log(`Found predicted2cp data for ${electorate}:`, JSON.stringify(tppSourceData, null, 2))
+    } else if (item.simple2CP && typeof item.simple2CP === 'object') {
+      tppSourceData = item.simple2CP
+      console.log(`Found simple2CP data for ${electorate}:`, JSON.stringify(tppSourceData, null, 2))
     }
     
-    // Extract name from winner object
-    const fullName = winner.name || winner.candidateName || winner.fullName || 
-                     winner.memberName || winner.personName || ''
-    
-    if (!fullName) {
-      console.log(`No name found for winner in ${electorate}`)
-      return null
-    }
-    
-    const nameParts = fullName.trim().split(' ')
-    const firstName = nameParts[0] || ''
-    const lastName = nameParts.slice(1).join(' ') || ''
-    
-    if (!firstName || !lastName) {
-      console.log(`Incomplete name for ${fullName} in ${electorate}`)
-      return null
-    }
-    
-    // Extract party - handle both string and object cases
-    let partyName = 'Independent'
-    
-    // First try holdingParty from the item
-    if (item.holdingParty) {
-      if (typeof item.holdingParty === 'string') {
-        partyName = item.holdingParty
-      } else if (typeof item.holdingParty === 'object' && item.holdingParty.name) {
-        partyName = item.holdingParty.name
-      } else if (typeof item.holdingParty === 'object' && item.holdingParty.shortName) {
-        partyName = item.holdingParty.shortName
-      }
-    }
-    
-    // If holdingParty didn't work, try winner's party info
-    if (partyName === 'Independent') {
-      const winnerParty = winner.party || winner.partyName || winner.politicalParty || 
-                         winner.partyAffiliation || winner.affiliation
-      
-      if (winnerParty) {
-        if (typeof winnerParty === 'string') {
-          partyName = winnerParty
-        } else if (typeof winnerParty === 'object' && winnerParty.name) {
-          partyName = winnerParty.name
-        } else if (typeof winnerParty === 'object' && winnerParty.shortName) {
-          partyName = winnerParty.shortName
-        }
-      }
-    }
-    
-    console.log(`Party extraction for ${electorate}: ${typeof partyName === 'string' ? partyName : 'OBJECT_DETECTED'}`)
-    
-    // NEW: Extract comprehensive vote and percentage data
+    // Initialize vote and percentage variables with defaults
     let totalVotesCast = 0
     let currentMarginVotes = 0
     let currentMarginPercentage = 0
@@ -405,57 +327,148 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
     let loserTwoPartyPreferredVotes = 0
     let previousMarginPercentage = 0
     let swingPercentage = 0
+    let winnerName = ''
+    let winnerParty = ''
     
-    // Extract total votes cast
-    totalVotesCast = extractVotes(
-      item.totalVotes || item.totalEnrolment || item.totalBallots || 
-      item.formalVotes || item.validVotes || '0'
-    )
-    
-    // If item.margin is total votes (as you mentioned), use it
-    if (item.margin && extractVotes(item.margin) > 1000) {
-      totalVotesCast = extractVotes(item.margin)
-    }
-    
-    // Extract previous margin percentage
-    previousMarginPercentage = extractPercentage(
-      item.marginPercent || item.previousMargin || item.lastMargin || '0'
-    )
-    
-    // Extract two-party preferred percentages and VOTE COUNTS from parties array
-    if (item.parties && Array.isArray(item.parties)) {
-      // Sort parties by their two-party preferred percentage (afterRPeference)
-      const partiesWithTPP = item.parties
-        .filter((party: any) => party.afterRPeference !== undefined)
-        .sort((a: any, b: any) => (b.afterRPeference || 0) - (a.afterRPeference || 0))
+    // ENHANCED: Extract comprehensive data from TPP source
+    if (tppSourceData) {
+      console.log(`=== EXTRACTING FROM TPP SOURCE DATA ===`)
       
-      if (partiesWithTPP.length >= 2) {
-        winnerTwoPartyPreferredPercent = extractPercentage(partiesWithTPP[0].afterRPeference || '0')
-        loserTwoPartyPreferredPercent = extractPercentage(partiesWithTPP[1].afterRPeference || '0')
+      // Extract leading candidate (winner) data
+      const leadingCandidate = tppSourceData.leadingCandidate || tppSourceData.winner || tppSourceData.leading
+      if (leadingCandidate) {
+        console.log('Leading candidate data:', JSON.stringify(leadingCandidate, null, 2))
         
-        // NEW: Extract raw vote counts for TPP candidates
-        winnerTwoPartyPreferredVotes = extractVoteCount(partiesWithTPP[0])
-        loserTwoPartyPreferredVotes = extractVoteCount(partiesWithTPP[1])
+        // Extract winner TPP percentage and votes
+        winnerTwoPartyPreferredPercent = extractPercentage(leadingCandidate.pct || leadingCandidate.percent || leadingCandidate.percentage || '0')
+        winnerTwoPartyPreferredVotes = extractVotes(leadingCandidate.votes || leadingCandidate.voteCount || '0')
         
-        // Calculate current margin
-        currentMarginPercentage = winnerTwoPartyPreferredPercent - loserTwoPartyPreferredPercent
+        // Extract swing from leading candidate
+        swingPercentage = extractSwing(leadingCandidate.swing || leadingCandidate.swingPercent || '0')
+        
+        // Extract winner name and party
+        winnerName = leadingCandidate.name || leadingCandidate.candidateName || leadingCandidate.fullName || ''
+        winnerParty = extractPartyName(leadingCandidate.party || leadingCandidate.partyName || leadingCandidate.politicalParty || '')
+        
+        console.log(`Winner extracted: ${winnerName} (${winnerParty}) - ${winnerTwoPartyPreferredPercent}% (${winnerTwoPartyPreferredVotes} votes), swing: ${swingPercentage}%`)
+      }
+      
+      // Extract trailing candidate (loser) data
+      const trailingCandidate = tppSourceData.trailingCandidate || tppSourceData.loser || tppSourceData.trailing
+      if (trailingCandidate) {
+        console.log('Trailing candidate data:', JSON.stringify(trailingCandidate, null, 2))
+        
+        // Extract loser TPP percentage and votes
+        loserTwoPartyPreferredPercent = extractPercentage(trailingCandidate.pct || trailingCandidate.percent || trailingCandidate.percentage || '0')
+        loserTwoPartyPreferredVotes = extractVotes(trailingCandidate.votes || trailingCandidate.voteCount || '0')
+        
+        console.log(`Loser extracted: ${loserTwoPartyPreferredPercent}% (${loserTwoPartyPreferredVotes} votes)`)
+      }
+      
+      // Calculate current margin from TPP data
+      if (winnerTwoPartyPreferredVotes > 0 && loserTwoPartyPreferredVotes > 0) {
         currentMarginVotes = winnerTwoPartyPreferredVotes - loserTwoPartyPreferredVotes
+        currentMarginPercentage = winnerTwoPartyPreferredPercent - loserTwoPartyPreferredPercent
+        console.log(`Calculated margin: ${currentMarginVotes} votes (${currentMarginPercentage}%)`)
       }
     }
     
-    // Extract swing data - check 'swingDial' object as identified
-    if (item.swingDial && typeof item.swingDial === 'object') {
-      swingPercentage = extractSwing(item.swingDial.swing || item.swingDial.value || '0')
-    } else {
-      swingPercentage = extractSwing(
-        item.swing || winner.swing || winner.swingPercent || winner.swingPercentage || 
-        winner.swingTowards || winner.swingAgainst || '0'
-      )
+    // FALLBACK: If TPP source data not found, use existing logic
+    if (!tppSourceData) {
+      console.log(`No TPP source data found, using fallback extraction methods`)
+      
+      // Extract winner/candidate information - prioritize 'leadingCandidate' as identified
+      const winner = item.leadingCandidate || item.winner || item.candidate || item.elected || 
+                     item.member || item.incumbent || item.declared || item
+      
+      if (winner) {
+        // Extract name from winner object
+        const fullName = winner.name || winner.candidateName || winner.fullName || 
+                         winner.memberName || winner.personName || ''
+        
+        if (fullName) {
+          winnerName = fullName
+          const nameParts = fullName.trim().split(' ')
+          // We'll use these parts later
+        }
+        
+        // Extract party - handle both string and object cases
+        winnerParty = extractPartyName(winner.party || winner.partyName || winner.politicalParty || 
+                                     winner.partyAffiliation || winner.affiliation || item.holdingParty || 'Independent')
+      }
+      
+      // Extract two-party preferred percentages and VOTE COUNTS from parties array
+      if (item.parties && Array.isArray(item.parties)) {
+        // Sort parties by their two-party preferred percentage (afterRPeference)
+        const partiesWithTPP = item.parties
+          .filter((party: any) => party.afterRPeference !== undefined)
+          .sort((a: any, b: any) => (b.afterRPeference || 0) - (a.afterRPeference || 0))
+        
+        if (partiesWithTPP.length >= 2) {
+          winnerTwoPartyPreferredPercent = extractPercentage(partiesWithTPP[0].afterRPeference || '0')
+          loserTwoPartyPreferredPercent = extractPercentage(partiesWithTPP[1].afterRPeference || '0')
+          
+          // Extract raw vote counts for TPP candidates
+          winnerTwoPartyPreferredVotes = extractVoteCount(partiesWithTPP[0])
+          loserTwoPartyPreferredVotes = extractVoteCount(partiesWithTPP[1])
+          
+          // Calculate current margin
+          currentMarginPercentage = winnerTwoPartyPreferredPercent - loserTwoPartyPreferredPercent
+          currentMarginVotes = winnerTwoPartyPreferredVotes - loserTwoPartyPreferredVotes
+        }
+      }
+      
+      // Extract swing data - check 'swingDial' object as identified
+      if (item.swingDial && typeof item.swingDial === 'object') {
+        swingPercentage = extractSwing(item.swingDial.swing || item.swingDial.value || '0')
+      } else {
+        swingPercentage = extractSwing(
+          item.swing || winner?.swing || winner?.swingPercent || winner?.swingPercentage || 
+          winner?.swingTowards || winner?.swingAgainst || '0'
+        )
+      }
     }
     
-    console.log(`Comprehensive data for ${electorate}:`)
+    // Extract total votes cast from top-level fields
+    totalVotesCast = extractVotes(
+      item.totalVotes || item.totalEnrolment || item.totalBallots || 
+      item.formalVotes || item.validVotes || item.totalFormalVotes || '0'
+    )
+    
+    // If item.margin contains a large number, it might be total votes
+    if (item.margin && extractVotes(item.margin) > 1000) {
+      totalVotesCast = Math.max(totalVotesCast, extractVotes(item.margin))
+    }
+    
+    // Extract previous margin percentage from historical data
+    previousMarginPercentage = extractPercentage(
+      item.marginPercent || item.previousMargin || item.lastMargin || 
+      item.previousMarginPercent || item.lastElectionMargin || '0'
+    )
+    
+    // Validate that we have essential data
+    if (!winnerName) {
+      console.log(`No winner name found for ${electorate}`)
+      return null
+    }
+    
+    const nameParts = winnerName.trim().split(' ')
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.slice(1).join(' ') || ''
+    
+    if (!firstName || !lastName) {
+      console.log(`Incomplete name for ${winnerName} in ${electorate}`)
+      return null
+    }
+    
+    // Ensure we have a valid party name
+    if (!winnerParty || winnerParty === 'Independent') {
+      winnerParty = 'Independent'
+    }
+    
+    console.log(`=== FINAL EXTRACTED DATA FOR ${electorate} ===`)
     console.log(`  Name: ${firstName} ${lastName}`)
-    console.log(`  Party: ${partyName}`)
+    console.log(`  Party: ${winnerParty}`)
     console.log(`  Total votes cast: ${totalVotesCast}`)
     console.log(`  Current margin: ${currentMarginVotes} votes (${currentMarginPercentage}%)`)
     console.log(`  Winner TPP: ${winnerTwoPartyPreferredPercent}% (${winnerTwoPartyPreferredVotes} votes)`)
@@ -466,8 +479,8 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
     return {
       first_name: firstName,
       last_name: lastName,
-      party_name: partyName,
-      party_short_name: generateShortName(partyName),
+      party_name: winnerParty,
+      party_short_name: generateShortName(winnerParty),
       electorate_name: electorate,
       total_votes_cast: totalVotesCast,
       current_margin_votes: currentMarginVotes,
@@ -486,6 +499,15 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
   }
   
   return null
+}
+
+function extractPartyName(partyData: any): string {
+  if (typeof partyData === 'string') {
+    return partyData
+  } else if (typeof partyData === 'object' && partyData !== null) {
+    return partyData.name || partyData.shortName || partyData.fullName || 'Independent'
+  }
+  return 'Independent'
 }
 
 function extractVoteCount(party: any): number {
@@ -799,15 +821,4 @@ function removeDuplicates(members: ScrapedMemberData[]): ScrapedMemberData[] {
     seen.add(key)
     return true
   })
-}
-
-// TEMPORARILY DISABLED ECQ SCRAPING FUNCTION
-async function scrapeECQ(url: string): Promise<ScrapingResult> {
-  console.log('ECQ scraping temporarily disabled to focus on ABC improvements')
-  return {
-    success: false,
-    data: [],
-    errors: ['ECQ scraping temporarily disabled'],
-    totalFound: 0
-  }
 }
