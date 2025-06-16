@@ -25,6 +25,13 @@ export const STATE_OPTIONS: StateOption[] = [
     code: 'nsw',
     electionYear: '2023',
     electionDate: '2023-03-25'
+  },
+  {
+    id: '85ced57e-7f88-451d-95aa-3a298c8ec3bd', // Victoria UUID from your existing database
+    name: 'Victoria',
+    code: 'vic',
+    electionYear: '2022',
+    electionDate: '2022-11-26'
   }
 ];
 
