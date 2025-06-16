@@ -424,12 +424,64 @@ function extractMemberFromABCApiItem(item: any, sourceUrl: string): ScrapedMembe
 }
 
 function extractPartyName(partyData: any): string {
+  let rawPartyName = ''
+  
   if (typeof partyData === 'string') {
-    return partyData
+    rawPartyName = partyData
   } else if (typeof partyData === 'object' && partyData !== null) {
-    return partyData.name || partyData.short || partyData.fullName || 'Independent'
+    rawPartyName = partyData.name || partyData.short || partyData.fullName || 'Independent'
+  } else {
+    rawPartyName = 'Independent'
   }
-  return 'Independent'
+  
+  // STANDARDIZE PARTY NAMES - Map common variations to canonical names
+  const canonicalNames: { [key: string]: string } = {
+    // Labor Party variations
+    'Labor Party': 'Australian Labor Party',
+    'Labor': 'Australian Labor Party',
+    'ALP': 'Australian Labor Party',
+    'Australian Labor Party': 'Australian Labor Party',
+    
+    // Liberal National Party variations
+    'Liberal National Party': 'Liberal National Party',
+    'Liberal National': 'Liberal National Party',
+    'LNP': 'Liberal National Party',
+    
+    // Liberal Party variations
+    'Liberal Party': 'Liberal Party',
+    'Liberal': 'Liberal Party',
+    'LIB': 'Liberal Party',
+    
+    // Greens variations
+    'The Greens': 'Australian Greens',
+    'Australian Greens': 'Australian Greens',
+    'Greens': 'Australian Greens',
+    'GRN': 'Australian Greens',
+    
+    // One Nation variations
+    'One Nation': 'Pauline Hanson\'s One Nation',
+    'Pauline Hanson\'s One Nation': 'Pauline Hanson\'s One Nation',
+    'PHON': 'Pauline Hanson\'s One Nation',
+    'ON': 'Pauline Hanson\'s One Nation',
+    
+    // Katter's Australian Party
+    'Katter\'s Australian Party': 'Katter\'s Australian Party',
+    'KAP': 'Katter\'s Australian Party',
+    
+    // Independent
+    'Independent': 'Independent',
+    'IND': 'Independent'
+  }
+  
+  // Return canonical name if found, otherwise return the original
+  const canonical = canonicalNames[rawPartyName]
+  if (canonical) {
+    console.log(`Standardized party name: "${rawPartyName}" -> "${canonical}"`)
+    return canonical
+  }
+  
+  console.log(`Using original party name: "${rawPartyName}"`)
+  return rawPartyName || 'Independent'
 }
 
 function parseABCNewsHTML(html: string, sourceUrl: string): ScrapedMemberData[] {
@@ -564,8 +616,8 @@ function extractMemberFromDataObject(obj: any, sourceUrl: string): ScrapedMember
       return {
         first_name: firstName,
         last_name: lastName,
-        party_name: partyName,
-        party_short_name: generateShortName(partyName),
+        party_name: extractPartyName(partyName), // Apply standardization here too
+        party_short_name: generateShortName(extractPartyName(partyName)),
         electorate_name: electorate,
         total_votes_cast: totalVotesCast,
         current_margin_votes: currentMarginVotes,
@@ -607,8 +659,8 @@ function extractMemberFromABCHTML(html: string, sourceUrl: string): ScrapedMembe
       return {
         first_name: firstName,
         last_name: lastName,
-        party_name: partyMatch[1],
-        party_short_name: generateShortName(partyMatch[1]),
+        party_name: extractPartyName(partyMatch[1]), // Apply standardization here too
+        party_short_name: generateShortName(extractPartyName(partyMatch[1])),
         electorate_name: electorateMatch[1],
         total_votes_cast: marginMatch ? parseInt(marginMatch[1].replace(/,/g, ''), 10) : 0,
         current_margin_votes: marginMatch ? parseInt(marginMatch[1].replace(/,/g, ''), 10) : 0,
