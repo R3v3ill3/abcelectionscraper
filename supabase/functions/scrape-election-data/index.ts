@@ -690,10 +690,9 @@ function removeDuplicates(members: ScrapedMemberData[]): ScrapedMemberData[] {
   const seen = new Set<string>()
   return members.filter(member => {
     const key = `${member.first_name}-${member.last_name}-${member.electorate_name}`
-    if (seen.has(key) {
+    if (seen.has(key)) {
       return false
     }
-    )
     seen.add(key)
     return true
   })
