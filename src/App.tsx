@@ -3,9 +3,11 @@ import { Header } from './components/Header';
 import { ProgressBar } from './components/ProgressBar';
 import { DataTable } from './components/DataTable';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
+import { AuthGuard } from './components/AuthGuard';
+import { AuthProvider } from './contexts/AuthContext';
 import { useParliamentaryData } from './hooks/useParliamentaryData';
 
-function App() {
+function AppContent() {
   const [isClearing, setIsClearing] = useState(false);
   const { 
     members, 
@@ -58,11 +60,15 @@ function App() {
           {/* Main Content */}
           <div className="lg:col-span-3 space-y-8">
             <ProgressBar progress={progress} />
-            <DataTable 
-              members={members} 
-              isLoading={isLoading} 
-              isReviewMode={isReviewPending}
-            />
+            
+            {/* Wrap data operations in AuthGuard */}
+            <AuthGuard>
+              <DataTable 
+                members={members} 
+                isLoading={isLoading} 
+                isReviewMode={isReviewPending}
+              />
+            </AuthGuard>
           </div>
 
           {/* Sidebar */}
@@ -78,6 +84,14 @@ function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

@@ -1,7 +1,8 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle, Settings, ExternalLink, Save, X, Eye } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Settings, ExternalLink, Save, X, Eye, Shield } from 'lucide-react';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { ScrapedMemberData } from '../types/parliament';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ConfigurationPanelProps {
   onClearDatabase: () => void;
@@ -20,6 +21,7 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
 }) => {
   const supabaseConfigured = isSupabaseConfigured();
   const isReviewMode = scrapedDataForReview !== null;
+  const { user } = useAuth();
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -29,6 +31,32 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
       </div>
 
       <div className="space-y-6">
+        {/* Authentication Status */}
+        <div className="flex items-start space-x-3">
+          {user ? (
+            <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5" />
+          ) : (
+            <Shield className="w-5 h-5 text-amber-500 mt-0.5" />
+          )}
+          <div className="flex-1">
+            <h3 className="font-medium text-gray-900">Authentication</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              {user 
+                ? `Signed in as ${user.email}`
+                : 'Not authenticated'
+              }
+            </p>
+            {!user && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  Sign in to access scraping and database operations. This ensures secure access 
+                  with proper Row Level Security policies.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Review Mode Status */}
         {isReviewMode && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -43,7 +71,9 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
                 <div className="flex space-x-3 mt-4">
                   <button
                     onClick={onSaveReviewedData}
-                    className="inline-flex items-center px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors"
+                    disabled={!user}
+                    className="inline-flex items-center px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-colors"
+                    title={!user ? 'Sign in to save data' : ''}
                   >
                     <Save className="w-4 h-4 mr-2" />
                     Save to Database
@@ -128,15 +158,18 @@ export const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({
             <h3 className="font-medium text-gray-900 mb-3">Database Actions</h3>
             <button
               onClick={onClearDatabase}
-              disabled={isClearing || isReviewMode}
+              disabled={isClearing || isReviewMode || !user}
               className="inline-flex items-center px-4 py-2 border border-red-300 rounded-lg text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title={!user ? 'Sign in to clear data' : ''}
             >
               {isClearing ? 'Clearing...' : 'Clear All Data'}
             </button>
             <p className="text-xs text-gray-500 mt-2">
-              {isReviewMode 
-                ? 'Complete or cancel the review process before clearing data.'
-                : 'This will permanently delete all scraped data from the database.'
+              {!user 
+                ? 'Sign in to access database management features.'
+                : isReviewMode 
+                  ? 'Complete or cancel the review process before clearing data.'
+                  : 'This will permanently delete all scraped data from the database.'
               }
             </p>
           </div>
