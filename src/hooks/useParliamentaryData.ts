@@ -39,6 +39,13 @@ export const STATE_OPTIONS: StateOption[] = [
     code: 'sa',
     electionYear: '2022',
     electionDate: '2022-03-19'
+  },
+  {
+    id: 'b4b4be52-0ba2-4996-ad76-a18ef792eb7e', // Northern Territory UUID from your existing database
+    name: 'Northern Territory',
+    code: 'nt',
+    electionYear: '2024',
+    electionDate: '2024-08-24'
   }
 ];
 
