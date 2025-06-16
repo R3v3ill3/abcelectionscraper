@@ -18,6 +18,13 @@ export const STATE_OPTIONS: StateOption[] = [
     code: 'wa',
     electionYear: '2025',
     electionDate: '2025-03-08'
+  },
+  {
+    id: 'f7d3c4e8-9b2a-4f6d-8e1c-3a5b7c9d0e2f', // NSW UUID - you'll need to add this to your database
+    name: 'New South Wales',
+    code: 'nsw',
+    electionYear: '2023',
+    electionDate: '2023-03-25'
   }
 ];
 

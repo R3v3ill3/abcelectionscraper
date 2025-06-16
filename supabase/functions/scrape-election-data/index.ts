@@ -105,7 +105,7 @@ async function scrapeABCNews(url: string, stateCode: string, year: string): Prom
     
     // Use the direct API endpoints that ABC News uses internally
     const apiEndpoints = [
-      `https://www.abc.net.au/news-web/api/loader/channelrefetch?name=ElectionElectorateList&props=%7B%22meta%22%3A%7B%22year%22%3A%22${year}%22%2C%22state%22%3A%22${stateCode}%22%2C%22maxParties%22%3A4%2C%22maxSwing%22%3A15%2C%22totalSeats%22%3A93%2C%22toWin%22%3A47%2C%22showBooth%22%3Afalse%2C%22useV3%22%3Atrue%2C%22publishDate%22%3A%22${year}-10-26T17%3A00%3A00%2B10%3A00%22%2C%22remoteContentPath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2F${stateCode}%2F${year}%22%2C%22resultsDir%22%3A%22results%22%2C%22picturePath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2F${stateCode}%2F${year}%2Fguide%2Fphotos%2F%22%7D%7D`,
+      `https://www.abc.net.au/news-web/api/loader/channelrefetch?name=ElectionElectorateList&props=%7B%22meta%22%3A%7B%22year%22%3A%22${year}%22%2C%22state%22%3A%22${stateCode}%22%2C%22maxParties%22%3A4%2C%22maxSwing%22%3A15%2C%22totalSeats%22%3A93%2C%22toWin%22%3A47%2C%22showBooth%22%3Afalse%2C%22useV3%22%3Atrue%2C%22publishDate%22%3A%22${year}-03-25T17%3A00%3A00%2B10%3A00%22%2C%22remoteContentPath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2F${stateCode}%2F${year}%22%2C%22resultsDir%22%3A%22results%22%2C%22picturePath%22%3A%22https%3A%2F%2Fwww.abc.net.au%2Fdat%2Fnews%2Felections%2F${stateCode}%2F${year}%2Fguide%2Fphotos%2F%22%7D%7D`,
       `https://www.abc.net.au/dat/news/elections/${stateCode}/${year}/results/electorates.json`,
       `https://www.abc.net.au/dat/news/elections/${stateCode}/${year}/results/summary.json`
     ]
